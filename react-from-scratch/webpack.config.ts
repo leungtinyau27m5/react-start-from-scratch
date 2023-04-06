@@ -1,6 +1,10 @@
 import path from "path";
 import { Configuration } from "webpack";
 import HtmlWebpackPlugin from "html-webpack-plugin";
+import CssMinimizerPlugin from "css-minimizer-webpack-plugin";
+import MiniCssExtractPlugin from "mini-css-extract-plugin";
+
+const IMAGE_SIZE_LIMIT = 10_000;
 
 const config = (): Configuration => {
   return {
@@ -9,6 +13,8 @@ const config = (): Configuration => {
     output: {
       path: path.resolve(__dirname, "./dist/"),
       filename: "[name].js",
+      chunkFilename: "static/js/[name].[ext]",
+      assetModuleFilename: "static/media/[name].[ext]",
     },
     module: {
       rules: [
@@ -22,10 +28,45 @@ const config = (): Configuration => {
             compact: true,
           },
         },
+        // hanlding images, will build the image into the assets folder: output.assetModuleFilename
+        {
+          test: [/\.bmp$/, /\.gif$/, /\.jpe?g$/, /\.png$/],
+          type: "asset",
+          parser: {
+            dataUrlCondition: {
+              maxSize: IMAGE_SIZE_LIMIT,
+            },
+          },
+        },
+        // import svg as component
+        {
+          test: /\.svg$/,
+          use: [
+            {
+              loader: "@svgr/webpack",
+              options: {
+                prettier: false,
+                svgo: false,
+                svgoConfig: {
+                  plugins: [{ removeViewBox: false }],
+                },
+                titleProp: true,
+                ref: true,
+              },
+            },
+            {
+              loader: "file-loader",
+              options: {
+                name: "static/media/[name].[ext]",
+              },
+            },
+          ],
+        },
       ],
     },
     resolve: {
       extensions: [".js", ".jsx", ".ts", ".tsx", ".json"],
+      // absolute import paths
       alias: {
         src: path.resolve(__dirname, "./src/"),
       },
@@ -33,9 +74,32 @@ const config = (): Configuration => {
     plugins: [
       new HtmlWebpackPlugin({
         template: "index.html",
+        // injecting the main.js into index.html
         inject: true,
       }),
+      new MiniCssExtractPlugin({
+        filename: "static/css/[name].[contenthash:8].css",
+        chunkFilename: "static/css/[name].[contenthash:8].chunk.css",
+      }),
     ],
+    optimization: {
+      minimize: true,
+      splitChunks: {
+        chunks: "async",
+        maxAsyncRequests: 10,
+        maxInitialRequests: 10,
+        cacheGroups: {
+          vendor: {
+            name: "vendors",
+            test: /\/node_modules\/(react-router-dom|react|react-dom)/,
+            priority: 10,
+            chunks: "all",
+            reuseExistingChunk: false,
+          },
+        },
+      },
+      minimizer: [new CssMinimizerPlugin()],
+    },
   };
 };
 
